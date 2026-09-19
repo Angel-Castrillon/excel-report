@@ -1,13 +1,25 @@
 """
 Módulo de configuración global de la aplicación.
 Centraliza rutas de almacenamiento, nombres de archivo y parámetros de la API.
+Compatible con ejecución desde código fuente y como ejecutable congelado (.exe con PyInstaller).
 """
+import sys
 from pathlib import Path
 
-# Directorio raíz del proyecto
-BASE_DIR = Path(__file__).resolve().parent.parent
+# Detectar si se está ejecutando como ejecutable empaquetado (PyInstaller)
+IS_FROZEN = getattr(sys, 'frozen', False)
 
-# Directorios de datos y cargas
+if IS_FROZEN:
+    # Directorio donde se encuentra el .exe
+    BASE_DIR = Path(sys.executable).resolve().parent
+    # Directorio temporal donde PyInstaller descomprime los recursos estáticos
+    BUNDLE_DIR = Path(getattr(sys, '_MEIPASS', BASE_DIR))
+    STATIC_DIR = BUNDLE_DIR / "app" / "static"
+else:
+    BASE_DIR = Path(__file__).resolve().parent.parent
+    STATIC_DIR = BASE_DIR / "app" / "static"
+
+# Directorios de datos y cargas persistentes (siempre junto al ejecutable o en la raíz)
 DATA_DIR = BASE_DIR / "data"
 UPLOAD_DIR = DATA_DIR / "uploads"
 DB_PATH = DATA_DIR / "excel_dashboard.db"

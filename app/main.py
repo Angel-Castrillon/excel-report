@@ -8,7 +8,14 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from app.config import BASE_DIR, APP_URL, ALLOWED_EXTENSIONS, MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB
+from app.config import (
+    BASE_DIR,
+    STATIC_DIR,
+    APP_URL,
+    ALLOWED_EXTENSIONS,
+    MAX_FILE_SIZE_BYTES,
+    MAX_FILE_SIZE_MB
+)
 from app.database import init_db
 from app.models import (
     DatasetDetail,
@@ -47,10 +54,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Directorio de estáticos
-STATIC_DIR = BASE_DIR / "app" / "static"
-STATIC_DIR.mkdir(parents=True, exist_ok=True)
-
+# Asegurar que la base de datos se inicialice al arrancar
 @app.on_event("startup")
 def on_startup():
     """Inicializa la base de datos al arrancar el servidor."""
