@@ -3,13 +3,20 @@ Instancia principal de la aplicación FastAPI.
 Configura rutas, middleware y el ciclo de vida de la aplicación.
 """
 from pathlib import Path
+from typing import List, Dict, Any
 from fastapi import FastAPI, UploadFile, File, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.config import APP_URL, ALLOWED_EXTENSIONS, MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB
 from app.database import init_db
-from app.models import DatasetDetail
-from app.services.dataset_service import create_dataset_from_upload
+from app.models import DatasetDetail, DatasetSummary, DatasetConfigUpdate
+from app.services.dataset_service import (
+    create_dataset_from_upload,
+    list_datasets,
+    get_dataset_detail,
+    update_dataset_config,
+    delete_dataset
+)
 
 app = FastAPI(
     title="Excel Report Dashboard API",
@@ -39,6 +46,26 @@ def health_check():
         "service": "Excel Report Dashboard",
         "version": "0.1.0"
     }
+
+# ==========================================
+# GESTIÓN DE DATASETS (CRUD)
+# ==========================================
+
+@app.get("/api/datasets", response_model=List[DatasetSummary])
+def get_all_datasets():
+    """Retorna la lista histórica de todos los datasets subidos."""
+    return list_datasets()
+
+@app.get("/api/datasets/{dataset_id}", response_model=DatasetDetail)
+def get_dataset(dataset_id: int):
+    """Obtiene el detalle completo de un dataset con sus columnas y configuración guardada."""
+    dataset = get_dataset_detail(dataset_id)
+    if not dataset:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dataset con ID {dataset_id} no encontrado."
+        )
+    return dataset
 
 @app.post("/api/datasets/upload", response_model=DatasetDetail, status_code=status.HTTP_201_CREATED)
 async def upload_excel_dataset(file: UploadFile = File(...)):
@@ -84,3 +111,35 @@ async def upload_excel_dataset(file: UploadFile = File(...)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error procesando el archivo Excel: {str(e)}"
         )
+
+@app.put("/api/datasets/{dataset_id}/config")
+def save_dataset_configuration(dataset_id: int, payload: DatasetConfigUpdate):
+    """Guarda la configuración personalizada de gráficos y filtros para el dataset."""
+    dataset = get_dataset_detail(dataset_id)
+    if not dataset:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dataset con ID {dataset_id} no encontrado."
+        )
+    success = update_dataset_config(dataset_id, payload.custom_config)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="No se pudo actualizar la configuración."
+        )
+    return {"status": "success", "message": "Configuración guardada exitosamente."}
+
+@app.delete("/api/datasets/{dataset_id}")
+def remove_dataset(dataset_id: int):
+    """Elimina permanentemente un dataset y su tabla asociada en SQLite."""
+    success = delete_dataset(dataset_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dataset con ID {dataset_id} no encontrado."
+        )
+    return {
+        "status": "deleted",
+        "id": dataset_id,
+        "message": "Dataset y datos asociados eliminados correctamente."
+    }
