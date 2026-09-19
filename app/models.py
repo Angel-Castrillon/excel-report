@@ -51,13 +51,13 @@ class QueryRequest(BaseModel):
     limit: int = Field(50, ge=1, le=1000)
     offset: int = Field(0, ge=0)
     sort_by: Optional[str] = None
-    sort_order: str = Field("asc", regex="^(asc|desc|ASC|DESC)$")
+    sort_order: str = Field("asc", pattern="^(asc|desc|ASC|DESC)$")
 
 class AggregationRequest(BaseModel):
     """Petición de agregación para renderizar gráficos."""
     dimension: str = Field(..., description="Columna para el Eje X (categoría o fecha)")
     metric: Optional[str] = Field(None, description="Columna numérica para el Eje Y")
-    aggregation_func: str = Field("sum", regex="^(sum|avg|count|min|max)$", description="Operación: sum, avg, count, min, max")
+    aggregation_func: str = Field("sum", pattern="^(sum|avg|count|min|max)$", description="Operación: sum, avg, count, min, max")
     filters: Optional[List[QueryFilter]] = Field(default_factory=list)
     limit: int = Field(15, ge=1, le=100, description="Límite de categorías para evitar saturar el gráfico")
     sort_by_metric: bool = Field(True, description="Si es True, ordena por el valor de la métrica de mayor a menor")
