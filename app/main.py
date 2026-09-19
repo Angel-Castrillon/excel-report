@@ -1,21 +1,35 @@
 """
 Instancia principal de la aplicación FastAPI.
-Configura rutas, middleware y el ciclo de vida de la aplicación.
+Configura rutas de la API, servicios analíticos y sirve la interfaz web local.
 """
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from fastapi import FastAPI, UploadFile, File, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from app.config import APP_URL, ALLOWED_EXTENSIONS, MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from app.config import BASE_DIR, APP_URL, ALLOWED_EXTENSIONS, MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB
 from app.database import init_db
-from app.models import DatasetDetail, DatasetSummary, DatasetConfigUpdate
+from app.models import (
+    DatasetDetail,
+    DatasetSummary,
+    DatasetConfigUpdate,
+    QueryFilter,
+    QueryRequest,
+    AggregationRequest
+)
 from app.services.dataset_service import (
     create_dataset_from_upload,
     list_datasets,
     get_dataset_detail,
     update_dataset_config,
     delete_dataset
+)
+from app.services.query_service import (
+    get_filter_options,
+    get_dataset_kpis,
+    get_table_data,
+    get_chart_aggregation
 )
 
 app = FastAPI(
@@ -32,6 +46,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Directorio de estáticos
+STATIC_DIR = BASE_DIR / "app" / "static"
+STATIC_DIR.mkdir(parents=True, exist_ok=True)
 
 @app.on_event("startup")
 def on_startup():
@@ -86,7 +104,6 @@ async def upload_excel_dataset(file: UploadFile = File(...)):
             detail=f"Formato no permitido ({file_ext}). Solo se admiten archivos {', '.join(ALLOWED_EXTENSIONS)}."
         )
         
-    # Leer el contenido completo del archivo subido
     contents = await file.read()
     if len(contents) > MAX_FILE_SIZE_BYTES:
         raise HTTPException(
@@ -143,3 +160,53 @@ def remove_dataset(dataset_id: int):
         "id": dataset_id,
         "message": "Dataset y datos asociados eliminados correctamente."
     }
+
+# ==========================================
+# CONSULTAS, FILTROS Y ANALÍTICA
+# ==========================================
+
+@app.get("/api/datasets/{dataset_id}/filter-options")
+def get_dataset_filter_options(dataset_id: int):
+    """Retorna las opciones y rangos de cada columna para configurar filtros dinámicos."""
+    dataset = get_dataset_detail(dataset_id)
+    if not dataset:
+        raise HTTPException(status_code=404, detail="Dataset no encontrado")
+    return get_filter_options(dataset_id)
+
+@app.post("/api/datasets/{dataset_id}/kpis")
+def calculate_dataset_kpis(dataset_id: int, filters: Optional[List[QueryFilter]] = None):
+    """Calcula los KPIs filtrados del dataset."""
+    dataset = get_dataset_detail(dataset_id)
+    if not dataset:
+        raise HTTPException(status_code=404, detail="Dataset no encontrado")
+    return get_dataset_kpis(dataset_id, filters)
+
+@app.post("/api/datasets/{dataset_id}/table")
+def query_dataset_table(dataset_id: int, req: QueryRequest):
+    """Retorna los datos tabulares paginados y ordenables con filtros aplicados."""
+    dataset = get_dataset_detail(dataset_id)
+    if not dataset:
+        raise HTTPException(status_code=404, detail="Dataset no encontrado")
+    return get_table_data(dataset_id, req)
+
+@app.post("/api/datasets/{dataset_id}/chart")
+def aggregate_chart_data(dataset_id: int, req: AggregationRequest):
+    """Genera datos agregados para renderizar un gráfico (barras, líneas, etc.)."""
+    dataset = get_dataset_detail(dataset_id)
+    if not dataset:
+        raise HTTPException(status_code=404, detail="Dataset no encontrado")
+    return get_chart_aggregation(dataset_id, req)
+
+# ==========================================
+# SERVIR FRONTEND ESTÁTICO (SPA)
+# ==========================================
+
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+@app.get("/")
+def serve_index():
+    """Sirve la interfaz web principal."""
+    index_file = STATIC_DIR / "index.html"
+    if not index_file.exists():
+        return {"message": "Interfaz frontend en construcción."}
+    return FileResponse(str(index_file))
